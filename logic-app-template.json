@@ -1,0 +1,269 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Convert_CDA_to_FHIR": {
+                "inputs": {
+                    "body": "@body('Get_blob_content')",
+                    "method": "POST",
+                    "uri": "https://[FHIR_CONVERTER_URL]/api/convert/cda/ccd.hbs"
+                },
+                "runAfter": {
+                    "Get_blob_content": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_Access_Token": {
+                "inputs": {
+                    "body": "grant_type=client_credentials&client_id=[AZURE_AD_CLIENT_ID]&resource=https://[RESOURCE].azurehealthcareapis.com&client_secret=[AZURE_AD_CLIENT_SECRET]",
+                    "headers": {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    "method": "POST",
+                    "uri": "https://login.microsoftonline.com/[AZURE_TENANT_ID]/oauth2/token"
+                },
+                "runAfter": {
+                    "Skip_root_element": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_blob_content": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent('JTJmY2RhJTJmY2RhLnhtbA=='))}/content",
+                    "queries": {
+                        "inferContentType": true
+                    }
+                },
+                "metadata": {
+                    "JTJmY2RhJTJmY2RhLnhtbA==": "/cda/cda.xml"
+                },
+                "runAfter": {},
+                "type": "ApiConnection"
+            },
+            "Parse_Access_Token": {
+                "inputs": {
+                    "content": "@body('Get_Access_Token')",
+                    "schema": {
+                        "properties": {
+                            "access_token": {
+                                "type": "string"
+                            },
+                            "expires_in": {
+                                "type": "string"
+                            },
+                            "expires_on": {
+                                "type": "string"
+                            },
+                            "ext_expires_in": {
+                                "type": "string"
+                            },
+                            "not_before": {
+                                "type": "string"
+                            },
+                            "resource": {
+                                "type": "string"
+                            },
+                            "token_type": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Get_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Send_data_to_API_for_FHIR": {
+                "inputs": {
+                    "body": "@body('Skip_root_element')",
+                    "headers": {
+                        "Authorization": "@body('Parse_Access_Token')?['access_token']",
+                        "Content-Type": "application/json"
+                    },
+                    "method": "POST",
+                    "uri": "https://[FHIR_ENDPOINT].azurehealthcareapis.com/Bundle"
+                },
+                "runAfter": {
+                    "Parse_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Skip_root_element": {
+                "inputs": {
+                    "content": "@body('Convert_CDA_to_FHIR')?['fhirResource']",
+                    "schema": {
+                        "properties": {
+                            "entry": {
+                                "items": {
+                                    "properties": {
+                                        "fullUrl": {
+                                            "type": "string"
+                                        },
+                                        "request": {
+                                            "properties": {
+                                                "method": {
+                                                    "type": "string"
+                                                },
+                                                "url": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "resource": {
+                                            "properties": {
+                                                "confidentiality": {
+                                                    "type": "string"
+                                                },
+                                                "date": {
+                                                    "type": "string"
+                                                },
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "identifier": {
+                                                    "properties": {
+                                                        "use": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "resourceType": {
+                                                    "type": "string"
+                                                },
+                                                "status": {
+                                                    "type": "string"
+                                                },
+                                                "subject": {
+                                                    "properties": {
+                                                        "reference": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "title": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "properties": {
+                                                        "coding": {
+                                                            "items": {
+                                                                "properties": {
+                                                                    "code": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "display": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "system": {
+                                                                        "type": "string"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "system",
+                                                                    "code",
+                                                                    "display"
+                                                                ],
+                                                                "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "required": [
+                                        "fullUrl",
+                                        "resource",
+                                        "request"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "meta": {
+                                "properties": {
+                                    "lastUpdated": {
+                                        "type": "string"
+                                    },
+                                    "versionId": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "resourceType": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Convert_CDA_to_FHIR": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "Recurrence": {
+                "recurrence": {
+                    "frequency": "Month",
+                    "interval": 1
+                },
+                "type": "Recurrence"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "azureblob": {
+                    "connectionId": "/subscriptions/[AZURE_SUBSCRIPTION_ID]/resourceGroups/FHIR/providers/Microsoft.Web/connections/azureblob",
+                    "connectionName": "azureblob",
+                    "id": "/subscriptions/[AZURE_SUBSCRIPTION_ID]/providers/Microsoft.Web/locations/northeurope/managedApis/azureblob"
+                }
+            }
+        }
+    }
+}
